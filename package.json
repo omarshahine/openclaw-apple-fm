@@ -1,0 +1,19 @@
+{
+  "name": "openclaw-apple-fm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenClaw node-host plugin that runs Apple Foundation Models (on-device) on a paired macOS 27 node",
+  "type": "module",
+  "license": "MIT",
+  "openclaw": {
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.9.4"
+    }
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.9.4"
+  }
+}

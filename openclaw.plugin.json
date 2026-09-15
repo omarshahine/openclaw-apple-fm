@@ -1,0 +1,27 @@
+{
+  "id": "apple-fm",
+  "name": "Apple Foundation Models",
+  "description": "Runs Apple's on-device Foundation Models (via /usr/bin/fm serve) on a paired macOS 27 node and exposes it to agents as the apple_fm tool.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "socketPath": {
+        "type": "string",
+        "description": "Unix socket for the private fm serve process. Defaults to ~/.openclaw/apple-fm/fm.sock."
+      },
+      "defaultMaxTokens": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4096,
+        "description": "Default max_tokens when the caller does not pass maxTokens."
+      },
+      "requestTimeoutMs": {
+        "type": "integer",
+        "minimum": 1000,
+        "maximum": 600000,
+        "description": "Per-request timeout for fm serve."
+      }
+    }
+  }
+}
