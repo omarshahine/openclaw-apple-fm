@@ -8,7 +8,7 @@
   "author": "Omar Shahine",
   "files": ["src", "native", "openclaw.plugin.json", "README.md", "LICENSE"],
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --import ./test/ts-resolve.mjs --test test/",
     "typecheck": "sh scripts/typecheck.sh",
     "check": "npm run typecheck && npm test",
     "smoke": "node scripts/smoke.mjs"

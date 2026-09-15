@@ -14,7 +14,7 @@ jobs:
         with:
           node-version: "26"
       - name: Unit tests
-        run: node --test test/
+        run: npm test
       # Typecheck needs the OpenClaw SDK types; the package also provides tsc.
       - name: Install OpenClaw (types + tsc)
         run: npm install -g openclaw@latest

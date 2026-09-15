@@ -17,7 +17,6 @@ agent (remote Gateway) ──node.invoke applefm.run──▶ node host (this Ma
 
 - macOS 27 with Apple Intelligence enabled
 - OpenClaw >= 2026.9.4 running `openclaw node run`
-- Xcode or Command Line Tools (for the image/OCR helper)
 - Apple Foundation Models CLI license accepted once per machine: `sudo fm license`
 
 ## Install (node only)
@@ -50,7 +49,13 @@ The node's new command surface needs re-approval on the Gateway (Control UI, or
 
 ## How OCR works
 
-The system model spends a fixed ~215-token image budget per attachment and downsamples to fit, so a whole page is unreadable (12% word recall on a test superbill). `native/imageprep.swift` renders pages at 200 dpi in grayscale and splits them into rows, then columns (max ~900 px wide), cutting at the blankest row/column so text is not sliced. Blank tiles are skipped. Each tile is transcribed separately through a single serial model queue, then joined per page.
+The system model spends a fixed ~215-token image budget per attachment and downsamples to fit, so a whole page is unreadable (12% word recall on a test superbill). The work is split so that only rendering is native:
+
+1. `native/imageprep.jxa.js` (JavaScript for Automation, built into macOS, no Xcode) renders each page at 200 dpi and writes a full-resolution PNG plus a small BMP.
+2. `src/bmp.ts` decodes that BMP and `src/tiling.ts` plans the cuts: rows sized from page width, then columns capped near 900 px, each cut placed on the blankest row/column so text is never sliced. Blank bands and tiles are dropped.
+3. The helper crops the planned tiles, and each tile is transcribed through a single serial model queue, then joined per page.
+
+Pixel work stays in TypeScript because the ObjC bridge reads pixels at ~13k samples/s (8.7 s per page) and reading raw `bitmapData` segfaults. Keeping it there also makes the cut planner unit-testable.
 
 Measured on a 2-page Prawn-generated superbill against its PDF text layer:
 
@@ -58,9 +63,9 @@ Measured on a 2-page Prawn-generated superbill against its PDF text layer:
 |---|---|
 | Whole page | 12% |
 | 3 full-width strips | 87% |
-| 3 rows x 2 columns (shipped) | 99% (page 2: 100%) |
+| rows x columns (shipped) | 99% (page 2: 100%) |
 
-Cost: ~5 s per tile on an M5, so ~40 s for 2 pages (10 tiles). The Swift helper compiles once on first use with `xcrun swiftc` (needs Xcode or Command Line Tools) and is cached in `~/.openclaw/apple-fm/bin/` by source hash.
+Cost: ~3 s per tile on an M5, so ~35 s for 2 pages (12 tiles). Rendering itself is ~70 ms per page.
 
 ## Limits
 
@@ -68,6 +73,7 @@ Cost: ~5 s per tile on an M5, so ~40 s for 2 pages (10 tiles). The Swift helper 
 - No reasoning, no stop sequences, single completion. `fm serve` exposes only the on-device `system` model (not Private Cloud Compute).
 - The small model is a weak counter: extraction over the superbill got totals right but miscounted table rows (6 vs 8).
 - The command is omitted from the node declaration until `fm` exists and its license is agreed; availability is re-checked every 30s.
+- Whole images used by `respond` skip the helper entirely; PDFs always need it because `sips` renders only page 1 and cannot select pages.
 
 ## Security
 
