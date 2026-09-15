@@ -5,7 +5,9 @@
  */
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,9 +28,16 @@ type HelperResponse = {
   pages: Array<{ page: number; strips: Array<{ path: string; width: number; height: number }> }>;
 };
 
-function execFileText(file: string, args: string[], input?: string, timeoutMs = 120_000): Promise<string> {
+function execFileText(
+  file: string,
+  args: string[],
+  input?: string,
+  timeoutMs = 120_000,
+  signal?: AbortSignal,
+): Promise<string> {
   return new Promise((resolvePromise, reject) => {
-    const child = execFile(file, args, { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+    const options = { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, ...(signal ? { signal } : {}) };
+    const child = execFile(file, args, options, (error, stdout, stderr) => {
       if (error) {
         reject(new Error(`${file} failed: ${String(stderr || error.message).trim()}`));
         return;
@@ -70,7 +79,28 @@ export function ensureHelper(): Promise<string> {
   return helperPromise;
 }
 
-function resolveInputPath(input: string): string {
+/** Default: anything under the node user's home directory. */
+export function defaultAllowedRoots(): string[] {
+  return [homedir()];
+}
+
+function withinRoots(candidate: string, roots: string[]): boolean {
+  return roots.some((root) => {
+    let resolvedRoot = resolve(root.startsWith("~/") ? join(homedir(), root.slice(2)) : root);
+    try {
+      resolvedRoot = realpathSync(resolvedRoot);
+    } catch {
+      return false;
+    }
+    return candidate === resolvedRoot || candidate.startsWith(`${resolvedRoot}/`);
+  });
+}
+
+/**
+ * A remote agent chooses this path, so it is resolved through symlinks and must
+ * land inside an allowed root before anything reads it.
+ */
+export function resolveInputPath(input: string, allowedRoots: string[] = defaultAllowedRoots()): string {
   const expanded = input.startsWith("~/") ? join(homedir(), input.slice(2)) : input;
   if (!isAbsolute(expanded)) {
     throw new Error(`image path must be absolute on the node: ${input}`);
@@ -79,9 +109,11 @@ function resolveInputPath(input: string): string {
   if (!SUPPORTED_EXTENSIONS.has(ext)) {
     throw new Error(`unsupported file type ${ext || "(none)"}; use PDF or a common image format`);
   }
+  let real: string;
   let size: number;
   try {
-    const stat = statSync(expanded);
+    real = realpathSync(expanded);
+    const stat = statSync(real);
     if (!stat.isFile()) {
       throw new Error("not a file");
     }
@@ -89,17 +121,23 @@ function resolveInputPath(input: string): string {
   } catch (error) {
     throw new Error(`cannot read ${expanded}: ${(error as Error).message}`);
   }
+  if (!withinRoots(real, allowedRoots)) {
+    throw new Error(`${expanded} is outside the allowed roots (${allowedRoots.join(", ")})`);
+  }
   if (size > MAX_INPUT_BYTES) {
     throw new Error(`${expanded} is ${Math.round(size / 1024 / 1024)} MB; limit is 30 MB`);
   }
-  return expanded;
+  return real;
 }
 
 export type PrepareOptions = {
   firstPage?: number;
   lastPage?: number;
-  /** Split pages into text-safe horizontal strips (OCR). False sends each page whole. */
+  /** Split pages into text-safe tiles (OCR). False sends each page whole. */
   tile: boolean;
+  /** Directories a node-local path may resolve into. Defaults to the home directory. */
+  allowedRoots?: string[];
+  signal?: AbortSignal;
 };
 
 /**
@@ -113,17 +151,18 @@ export async function prepareDocument(input: string, options: PrepareOptions): P
     let inputPath: string;
     const dataUrl = DATA_URL_RE.exec(input.trim());
     if (dataUrl) {
-      const bytes = Buffer.from(dataUrl[2].replace(/\s+/g, ""), "base64");
+      const [, mime = "png", payload = ""] = dataUrl;
+      const bytes = Buffer.from(payload.replace(/\s+/g, ""), "base64");
       if (bytes.length > MAX_INPUT_BYTES) {
         throw new Error("image data URL exceeds 30 MB");
       }
-      const ext = dataUrl[1].toLowerCase() === "jpg" ? "jpeg" : dataUrl[1].toLowerCase();
+      const ext = mime.toLowerCase() === "jpg" ? "jpeg" : mime.toLowerCase();
       inputPath = join(workDir, `input.${ext}`);
       writeFileSync(inputPath, bytes);
     } else if (input.trim().startsWith("data:")) {
       throw new Error("images[] data URLs must be data:image/<png|jpeg|heic|tiff|gif|webp>;base64,...");
     } else {
-      inputPath = resolveInputPath(input.trim());
+      inputPath = resolveInputPath(input.trim(), options.allowedRoots ?? defaultAllowedRoots());
     }
     const outDir = join(workDir, "out");
     mkdirSync(outDir);
@@ -137,6 +176,8 @@ export async function prepareDocument(input: string, options: PrepareOptions): P
         ...(options.firstPage ? { firstPage: options.firstPage } : {}),
         ...(options.lastPage ? { lastPage: options.lastPage } : {}),
       }),
+      120_000,
+      options.signal,
     );
     const response = JSON.parse(stdout) as HelperResponse;
     return {

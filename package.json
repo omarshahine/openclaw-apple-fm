@@ -1,19 +1,23 @@
 {
   "name": "openclaw-apple-fm",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "OpenClaw node-host plugin that runs Apple Foundation Models (on-device) on a paired macOS 27 node",
   "type": "module",
   "license": "MIT",
-  "openclaw": {
-    "extensions": [
-      "./src/index.ts"
-    ],
-    "compat": {
-      "pluginApi": ">=2026.9.4"
-    }
+  "author": "Omar Shahine",
+  "files": ["src", "native", "openclaw.plugin.json", "README.md", "LICENSE"],
+  "scripts": {
+    "test": "node --test test/",
+    "typecheck": "sh scripts/typecheck.sh",
+    "check": "npm run typecheck && npm test",
+    "smoke": "node scripts/smoke.mjs"
   },
-  "peerDependencies": {
-    "openclaw": ">=2026.9.4"
-  }
+  "openclaw": {
+    "extensions": ["./src/index.ts"],
+    "compat": { "pluginApi": ">=2026.9.4" }
+  },
+  "peerDependencies": { "openclaw": ">=2026.9.4" },
+  "engines": { "node": ">=24" },
+  "os": ["darwin"]
 }

@@ -41,10 +41,11 @@ The node's new command surface needs re-approval on the Gateway (Control UI, or
 | `respond` | Runs `prompt` (+ optional `system`, `jsonSchema`), optionally about up to 4 `images` sent whole |
 | `ocr` | Transcribes a PDF or image at `path` on the node (`pages` like `"2-4"`); with `prompt`/`jsonSchema`, answers over the transcript |
 | `result` | Fetches a running job by `jobId` |
+| `cancel` | Aborts a running job by `jobId` |
 
-- `images` / `path`: absolute node-local paths (PDF, PNG, JPEG, HEIC, TIFF, GIF, WebP, BMP; 30 MB max) or `data:image/...;base64` URLs.
+- `images` / `path`: absolute node-local paths (PDF, PNG, JPEG, HEIC, TIFF, GIF, WebP, BMP; 30 MB max) or `data:image/...;base64` URLs. Paths are resolved through symlinks and must land inside `allowedRoots`.
 - `jsonSchema`: a JSON-encoded string (strict tool-schema providers drop open-ended object params). Objects and `{name, schema}` wrappers are also accepted.
-- Gateway node tool calls time out at 30s. Every `respond`/`ocr` call runs as a job: the handler waits up to `waitMs` (default 20000) and otherwise returns `details.status: "running"` with a `jobId` for `action=result`. Results are kept 15 minutes.
+- Gateway node tool calls time out at 30s. Every `respond`/`ocr` call runs as a job: the handler waits up to `waitMs` (default 20000) and otherwise returns `details.status: "running"` with a `jobId` for `action=result`. Results are kept 15 minutes; at most 4 jobs run at once. Jobs are cancelled when the Gateway connection drops.
 - The model sees only `content`, so latency and token counts are appended as a bracketed line.
 
 ## How OCR works
@@ -68,14 +69,47 @@ Cost: ~5 s per tile on an M5, so ~40 s for 2 pages (10 tiles). The Swift helper 
 - The small model is a weak counter: extraction over the superbill got totals right but miscounted table rows (6 vs 8).
 - The command is omitted from the node declaration until `fm` exists and its license is agreed; availability is re-checked every 30s.
 
+## Security
+
+The tool is callable by any agent on the paired Gateway, so node-local reads are bounded:
+
+- Paths are resolved with `realpath` and must sit inside `allowedRoots` (default: the node user's home directory). Symlinks pointing outside are rejected.
+- Only PDF and common image extensions are accepted, 30 MB max.
+- `fm serve` listens on a Unix socket under `~/.openclaw/apple-fm/`, never on TCP, and prompts never leave the Mac.
+- Nothing is written outside a per-request temp directory (removed in a `finally`) and the compiled helper cache.
+
+Note that an agent asking this tool to transcribe a document receives the transcript, which then lives in that agent's context and its model provider. For sensitive documents, call the node directly (`openclaw nodes invoke`) instead of through an agent turn.
+
 ## Testing
 
 ```bash
-node scripts/smoke.mjs                          # status, text, JSON schema, input validation
+npm test          # unit tests (no fm required): params, jobs, path validation
+npm run typecheck # tsc against the installed OpenClaw SDK types
+npm run check     # both
+
+# Model paths: need macOS 27 + accepted license
+npm run smoke                                   # status, text, JSON schema, input validation
 node scripts/smoke.mjs --image /abs/photo.png   # respond with an image
 node scripts/smoke.mjs --ocr /abs/file.pdf      # OCR with job polling (--print to show text)
 ```
 
+CI runs the unit tests and typecheck; the model paths run manually because they need macOS 27, the Apple license, and the Swift toolchain.
+
 ## Config (`plugins.entries.apple-fm.config`)
 
-`socketPath`, `defaultMaxTokens`, `requestTimeoutMs`.
+| Key | Default | Purpose |
+|---|---|---|
+| `socketPath` | `~/.openclaw/apple-fm/fm.sock` | Unix socket for the private `fm serve` |
+| `defaultMaxTokens` | 1024 | `max_tokens` when the caller omits `maxTokens` |
+| `requestTimeoutMs` | 120000 | Per-request timeout for `fm serve` |
+| `allowedRoots` | home directory | Directories `ocr`/`images` paths may resolve into |
+
+## Gateway setup
+
+A node-only plugin is not allowlisted by default. On the Gateway:
+
+```bash
+openclaw config set gateway.nodes.commands.allow '["applefm.run", ...existing]' --strict-json
+```
+
+If the calling agent restricts tools (a `tools.profile` plus `alsoAllow`), add `apple_fm` to that agent's `alsoAllow`; otherwise the tool is filtered out of the agent's tool set even though the node publishes it. Then reconnect the node and approve its new command surface.

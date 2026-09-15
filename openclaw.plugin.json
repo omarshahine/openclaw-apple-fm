@@ -21,6 +21,13 @@
         "minimum": 1000,
         "maximum": 600000,
         "description": "Per-request timeout for fm serve."
+      },
+      "allowedRoots": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Directories that ocr/images paths may resolve into (symlinks are resolved first). Default: the node user's home directory."
       }
     }
   }

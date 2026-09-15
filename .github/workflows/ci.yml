@@ -1,0 +1,26 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+      - name: Unit tests
+        run: node --test test/
+      # Typecheck needs the OpenClaw SDK types; the package also provides tsc.
+      - name: Install OpenClaw (types + tsc)
+        run: npm install -g openclaw@latest
+      - name: Typecheck
+        run: sh scripts/typecheck.sh
+
+  # The model paths (fm serve, Swift helper, OCR accuracy) need macOS 27 with an
+  # accepted Apple Foundation Models CLI license, so they run manually:
+  #   node scripts/smoke.mjs && node scripts/smoke.mjs --ocr <file.pdf>
