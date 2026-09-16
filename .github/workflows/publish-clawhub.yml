@@ -11,7 +11,8 @@ permissions:
 jobs:
   publish:
     name: Publish to ClawHub
-    runs-on: ubuntu-latest
+    # The package is os: darwin, so npm refuses to install it on Linux runners.
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -19,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: "26"
 
       - name: Install clawhub CLI
         run: npm install -g clawhub
@@ -40,10 +41,13 @@ jobs:
           fi
           echo "text=$MSG" >> "$GITHUB_OUTPUT"
 
-      - name: Install + build (compile TS so clawhub validator finds dist/)
-        run: |
-          npm install
-          npm run build
+      # OpenClaw provides both the plugin SDK types and the tsc used by the build,
+      # so the plugin itself declares no npm dependencies.
+      - name: Install OpenClaw (plugin SDK + tsc)
+        run: npm install -g openclaw@latest
+
+      - name: Build (compile TS so the clawhub validator finds dist/)
+        run: npm run build
 
       - name: Sync manifest version to tag (tag is source of truth)
         run: |
