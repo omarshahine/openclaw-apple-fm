@@ -13,14 +13,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "26"
-      - name: Unit tests
-        run: npm test
-      # Typecheck needs the OpenClaw SDK types; the package also provides tsc.
-      - name: Install OpenClaw (types + tsc)
+      # The plugin imports openclaw/plugin-sdk/* (a peer dependency), and the SDK
+      # package also provides the tsc used below. Typecheck links it into
+      # node_modules, so it runs before the unit tests that import those modules.
+      - name: Install OpenClaw (plugin SDK + tsc)
         run: npm install -g openclaw@latest
       - name: Typecheck
-        run: sh scripts/typecheck.sh
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Build
+        run: npm run build
 
-  # The model paths (fm serve, Swift helper, OCR accuracy) need macOS 27 with an
+  # The model paths (fm serve, JXA rendering, OCR accuracy) need macOS 27 with an
   # accepted Apple Foundation Models CLI license, so they run manually:
-  #   node scripts/smoke.mjs && node scripts/smoke.mjs --ocr <file.pdf>
+  #   npm run smoke && node scripts/smoke.mjs --ocr <file.pdf>
