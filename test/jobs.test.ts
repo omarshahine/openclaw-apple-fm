@@ -1,12 +1,23 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { awaitJob, cancelAllJobs, cancelJob, getJob, resetJobs, runningJobCount, startJob } from "../src/jobs.ts";
+import { awaitJob, cancelAllJobs, cancelJob, getJob, runningJobCount, startJob } from "../src/jobs.ts";
 
 const done = (text: string) => JSON.stringify({ content: [{ type: "text", text }], details: { status: "done" } });
 
-afterEach(() => {
+const blockUntilAborted = async (_progress: unknown, signal: AbortSignal): Promise<string> => {
+  await new Promise<void>((resolve) => {
+    signal.addEventListener("abort", () => resolve());
+  });
+  throw new Error("cancelled");
+};
+
+afterEach(async () => {
   cancelAllJobs("test cleanup");
-  resetJobs();
+  // Let cancelled work settle so the next test starts with no running jobs.
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+  assert.equal(runningJobCount(), 0);
 });
 
 test("a fast job returns its result inside the wait budget", async () => {
@@ -50,7 +61,9 @@ test("job failures surface as errors naming the job kind", async () => {
 test("cancel aborts the work signal and reports cancellation", async () => {
   let aborted = false;
   const job = startJob("ocr", async (_progress, signal) => {
-    await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
+    await new Promise<void>((resolve) => {
+      signal.addEventListener("abort", () => resolve());
+    });
     aborted = signal.aborted;
     throw new Error("cancelled");
   });
@@ -62,12 +75,7 @@ test("cancel aborts the work signal and reports cancellation", async () => {
 });
 
 test("cancelAllJobs stops everything still running", async () => {
-  const jobs = [1, 2].map(() =>
-    startJob("ocr", async (_progress, signal) => {
-      await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
-      throw new Error("cancelled");
-    }),
-  );
+  const jobs = [1, 2].map(() => startJob("ocr", blockUntilAborted));
   assert.equal(runningJobCount(), 2);
   assert.equal(cancelAllJobs("gateway disconnected"), 2);
   await Promise.all(jobs.map((job) => assert.rejects(() => awaitJob(job, 1_000), /was cancelled/)));
@@ -79,12 +87,7 @@ test("getJob rejects unknown ids", () => {
 });
 
 test("too many running jobs is refused rather than queued forever", () => {
-  const started = [1, 2, 3, 4].map(() =>
-    startJob("ocr", async (_progress, signal) => {
-      await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
-      throw new Error("cancelled");
-    }),
-  );
+  const started = [1, 2, 3, 4].map(() => startJob("ocr", blockUntilAborted));
   assert.equal(started.length, 4);
   assert.throws(() => startJob("ocr", async () => done("x")), /too many apple_fm jobs/);
 });

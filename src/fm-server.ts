@@ -8,7 +8,7 @@ import http from "node:http";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-export const FM_BIN = "/usr/bin/fm";
+const FM_BIN = "/usr/bin/fm";
 export const DEFAULT_SOCKET_PATH = join(homedir(), ".openclaw", "apple-fm", "fm.sock");
 
 const START_TIMEOUT_MS = 20_000;
@@ -120,7 +120,9 @@ export class FmServer {
       throw new Error(`${FM_BIN} not found; Apple Foundation Models requires macOS 27`);
     }
     if (!fmLicenseAgreed()) {
-      throw new Error("Apple Foundation Models CLI license not accepted; run 'sudo fm license' on the node");
+      throw new Error(
+        "Apple Foundation Models CLI license not accepted; run 'sudo fm license' on the node",
+      );
     }
     mkdirSync(dirname(this.socketPath), { recursive: true, mode: 0o700 });
     if (existsSync(this.socketPath)) {
@@ -148,9 +150,13 @@ export class FmServer {
       if (await this.isHealthy()) {
         return;
       }
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise<void>((settle) => {
+        setTimeout(settle, 250);
+      });
     }
     child.kill("SIGTERM");
-    throw new Error(`fm serve did not become healthy in ${START_TIMEOUT_MS}ms: ${this.stderrTail.trim()}`);
+    throw new Error(
+      `fm serve did not become healthy in ${START_TIMEOUT_MS}ms: ${this.stderrTail.trim()}`,
+    );
   }
 }

@@ -8,7 +8,14 @@
  */
 import { execFile } from "node:child_process";
 import {
-  existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, extname, isAbsolute, join, resolve } from "node:path";
@@ -16,7 +23,12 @@ import { fileURLToPath } from "node:url";
 import { parseBmpToGray } from "./bmp.js";
 import { planTiles, type GrayPage, type Rect } from "./tiling.js";
 
-const HELPER_SCRIPT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "native", "imageprep.jxa.js");
+const HELPER_SCRIPT = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "native",
+  "imageprep.jxa.js",
+);
 const OSASCRIPT = "/usr/bin/osascript";
 const MAX_INPUT_BYTES = 30 * 1024 * 1024;
 const RENDER_DPI = 200;
@@ -24,7 +36,17 @@ const PROFILE_WIDTH = 300;
 const HELPER_TIMEOUT_MS = 120_000;
 /** Formats NSImage/PDFKit can open. */
 const SUPPORTED_EXTENSIONS = new Set([
-  ".pdf", ".png", ".jpg", ".jpeg", ".heic", ".heif", ".tif", ".tiff", ".gif", ".webp", ".bmp",
+  ".pdf",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".heic",
+  ".heif",
+  ".tif",
+  ".tiff",
+  ".gif",
+  ".webp",
+  ".bmp",
 ]);
 /** Sent to fm as-is when used whole; others are re-encoded to PNG by the helper. */
 const DIRECT_IMAGE_TYPES = new Map([
@@ -35,10 +57,13 @@ const DIRECT_IMAGE_TYPES = new Map([
   [".bmp", "image/bmp"],
   [".webp", "image/webp"],
 ]);
-const DATA_URL_RE = /^data:image\/(png|jpe?g|heic|heif|tiff|gif|webp|bmp);base64,([A-Za-z0-9+/=\s]+)$/i;
+const DATA_URL_RE =
+  /^data:image\/(png|jpe?g|heic|heif|tiff|gif|webp|bmp);base64,([A-Za-z0-9+/=\s]+)$/i;
 
-export type PreparedPage = { page: number; strips: string[] /* data URLs */ };
+type PreparedPage = { page: number; strips: string[] /* data URLs */ };
 export type PreparedDocument = { pageCount: number; pages: PreparedPage[] };
+
+type CropResponse = { tiles: Array<{ path: string }> };
 
 type RenderedPage = {
   page: number;
@@ -57,10 +82,14 @@ function execFileText(
   signal?: AbortSignal,
 ): Promise<string> {
   return new Promise((resolvePromise, reject) => {
-    const options = { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, ...(signal ? { signal } : {}) };
+    const options = {
+      timeout: timeoutMs,
+      maxBuffer: 16 * 1024 * 1024,
+      ...(signal ? { signal } : {}),
+    };
     const child = execFile(file, args, options, (error, stdout, stderr) => {
       if (error) {
-        reject(new Error(`${file} failed: ${String(stderr || error.message).trim()}`));
+        reject(new Error(`${file} failed: ${(stderr || error.message).trim()}`, { cause: error }));
         return;
       }
       resolvePromise(stdout);
@@ -113,7 +142,7 @@ function withinRoots(candidate: string, roots: string[]): boolean {
  * A remote agent chooses this path, so it is resolved through symlinks and must
  * land inside an allowed root before anything reads it.
  */
-export function resolveInputPath(input: string, allowedRoots: string[] = defaultAllowedRoots()): string {
+function resolveInputPath(input: string, allowedRoots: string[] = defaultAllowedRoots()): string {
   const expanded = input.startsWith("~/") ? join(homedir(), input.slice(2)) : input;
   if (!isAbsolute(expanded)) {
     throw new Error(`image path must be absolute on the node: ${input}`);
@@ -132,7 +161,8 @@ export function resolveInputPath(input: string, allowedRoots: string[] = default
     }
     size = stat.size;
   } catch (error) {
-    throw new Error(`cannot read ${expanded}: ${(error as Error).message}`);
+    // SAFETY: only fs calls throw here, and they always throw Error instances.
+    throw new Error(`cannot read ${expanded}: ${(error as Error).message}`, { cause: error });
   }
   if (!withinRoots(real, allowedRoots)) {
     throw new Error(`${expanded} is outside the allowed roots (${allowedRoots.join(", ")})`);
@@ -161,7 +191,10 @@ export type PrepareOptions = {
  * Accepts a node-local file path (PDF or image) or a base64 image data URL and
  * returns page images as data URLs. Temporary files are removed before returning.
  */
-export async function prepareDocument(input: string, options: PrepareOptions): Promise<PreparedDocument> {
+export async function prepareDocument(
+  input: string,
+  options: PrepareOptions,
+): Promise<PreparedDocument> {
   const trimmed = input.trim();
   const allowedRoots = options.allowedRoots ?? defaultAllowedRoots();
   const dataUrlMatch = DATA_URL_RE.exec(trimmed);
@@ -198,7 +231,7 @@ export async function prepareDocument(input: string, options: PrepareOptions): P
     }
     const outDir = join(workDir, "out");
     mkdirSync(outDir);
-    const rendered = (await runHelper(
+    const renderResponse = await runHelper(
       {
         mode: "render",
         input: inputPath,
@@ -209,7 +242,10 @@ export async function prepareDocument(input: string, options: PrepareOptions): P
         ...(options.lastPage ? { lastPage: options.lastPage } : {}),
       },
       options.signal,
-    )) as { pageCount: number; pages: RenderedPage[] };
+    );
+    // Malformed helper output fails JSON.parse inside runHelper before reaching here.
+    // SAFETY: render mode always answers with this shape.
+    const rendered = renderResponse as { pageCount: number; pages: RenderedPage[] };
 
     const pages: PreparedPage[] = [];
     for (const page of rendered.pages) {
@@ -223,14 +259,24 @@ export async function prepareDocument(input: string, options: PrepareOptions): P
         height: page.height,
       };
       const rects: Rect[] = planTiles(gray, { tile: options.tile });
-      if (rects.length === 1 && rects[0]?.width === page.width && rects[0]?.height === page.height) {
+      if (
+        rects.length === 1 &&
+        rects[0]?.width === page.width &&
+        rects[0]?.height === page.height
+      ) {
         pages.push({ page: page.page, strips: [dataUrl(page.png)] });
         continue;
       }
-      const tiles = rects.map((rect, index) => ({ ...rect, path: join(outDir, `p${page.page}-t${index + 1}.png`) }));
-      const cropped = (await runHelper({ mode: "crop", png: page.png, tiles }, options.signal)) as {
-        tiles: Array<{ path: string }>;
-      };
+      const tiles = rects.map((rect, index) => ({
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        path: join(outDir, `p${page.page}-t${index + 1}.png`),
+      }));
+      const cropResponse = await runHelper({ mode: "crop", png: page.png, tiles }, options.signal);
+      // SAFETY: crop mode answers with the list of tiles it wrote.
+      const cropped = cropResponse as CropResponse;
       pages.push({ page: page.page, strips: cropped.tiles.map((tile) => dataUrl(tile.path)) });
     }
     return { pageCount: rendered.pageCount, pages };

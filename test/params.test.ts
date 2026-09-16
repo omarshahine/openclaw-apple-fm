@@ -7,8 +7,6 @@ import {
   parsePages,
   resolveWaitMs,
   errorMessage,
-  MAX_WAIT_MS,
-  DEFAULT_WAIT_MS,
 } from "../src/params.ts";
 
 test("parseParams rejects non-objects and unknown actions", () => {
@@ -28,8 +26,9 @@ test("parseParams rejects a non-array images value", () => {
 });
 
 test("resolveWaitMs clamps to the gateway tool timeout budget", () => {
-  assert.equal(resolveWaitMs(undefined), DEFAULT_WAIT_MS);
-  assert.equal(resolveWaitMs(999_999), MAX_WAIT_MS);
+  // Defaults and the ceiling both stay inside the 30s gateway tool timeout.
+  assert.equal(resolveWaitMs(undefined), 20_000);
+  assert.equal(resolveWaitMs(999_999), 25_000);
   assert.equal(resolveWaitMs(-5), 0);
   assert.equal(resolveWaitMs(1234), 1234);
 });

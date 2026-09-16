@@ -10,11 +10,11 @@
  * are scaled back to the full-resolution render.
  */
 
-export const INK_THRESHOLD = 200;
+const INK_THRESHOLD = 200;
 /** Rows are sized relative to page width: 0.43 gives ~3 rows for a letter page. */
-export const DEFAULT_ROW_ASPECT = 0.43;
+const DEFAULT_ROW_ASPECT = 0.43;
 /** Keep tiles narrow enough that downsampling leaves small text legible. */
-export const DEFAULT_MAX_TILE_WIDTH = 900;
+const DEFAULT_MAX_TILE_WIDTH = 900;
 const BLANK_ROW_INK = 20;
 const BLANK_TILE_INK = 10;
 
@@ -37,8 +37,8 @@ export type TilePlanOptions = {
   tile?: boolean;
 };
 
-export function rowInkProfile(page: GrayPage): number[] {
-  const rows = new Array<number>(page.grayHeight).fill(0);
+function rowInkProfile(page: GrayPage): number[] {
+  const rows = Array.from<number>({ length: page.grayHeight }).fill(0);
   for (let y = 0; y < page.grayHeight; y += 1) {
     const offset = y * page.grayWidth;
     let ink = 0;
@@ -52,8 +52,8 @@ export function rowInkProfile(page: GrayPage): number[] {
   return rows;
 }
 
-export function columnInkProfile(page: GrayPage, top: number, bottom: number): number[] {
-  const columns = new Array<number>(page.grayWidth).fill(0);
+function columnInkProfile(page: GrayPage, top: number, bottom: number): number[] {
+  const columns = Array.from<number>({ length: page.grayWidth }).fill(0);
   for (let y = top; y < bottom; y += 1) {
     const offset = y * page.grayWidth;
     for (let x = 0; x < page.grayWidth; x += 1) {
@@ -70,7 +70,7 @@ export function columnInkProfile(page: GrayPage, top: number, bottom: number): n
  * middle of the longest blank run near the ideal boundary, or on the least-ink
  * line when the window has no blank run at all.
  */
-export function planCuts(profile: readonly number[], count: number): number[] {
+function planCuts(profile: readonly number[], count: number): number[] {
   const length = profile.length;
   if (count <= 1 || length === 0) {
     return [0, length];
@@ -160,7 +160,12 @@ export function planTiles(page: GrayPage, options: TilePlanOptions = {}): Rect[]
         continue;
       }
       tiles.push(
-        scaleRect({ x: left, y: top, width: right - left, height: bottom - top }, scaleX, scaleY, page),
+        scaleRect(
+          { x: left, y: top, width: right - left, height: bottom - top },
+          scaleX,
+          scaleY,
+          page,
+        ),
       );
     }
   }

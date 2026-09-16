@@ -9,6 +9,7 @@
 // stdin: {"mode":"render","input":"/abs","outDir":"/abs","dpi":200,"firstPage":1,"lastPage":10,"profileWidth":300}
 //   -> {"pageCount":N,"pages":[{"page":1,"png":"/abs.png","profile":"/abs.bmp","width":W,"height":H,"grayWidth":w,"grayHeight":h}]}
 //        {"mode":"crop","png":"/abs/page.png","tiles":[{"path":"/abs/t.png","x":0,"y":0,"width":10,"height":10}]}
+/* eslint-disable no-unused-expressions -- JXA invokes zero-argument ObjC methods as property reads. */
 ObjC.import("Quartz");
 ObjC.import("AppKit");
 
@@ -28,7 +29,9 @@ function writeStdout(text) {
 
 function fail(message) {
   $.NSFileHandle.fileHandleWithStandardError.writeData(
-    $.NSString.alloc.initWithUTF8String(`imageprep: ${message}\n`).dataUsingEncoding($.NSUTF8StringEncoding),
+    $.NSString.alloc
+      .initWithUTF8String(`imageprep: ${message}\n`)
+      .dataUsingEncoding($.NSUTF8StringEncoding),
   );
   $.exit(1);
 }
@@ -52,9 +55,18 @@ function writeProfile(rep, path, width) {
   const scale = Math.min(1, width / rep.pixelsWide);
   const w = Math.max(1, Math.round(rep.pixelsWide * scale));
   const h = Math.max(1, Math.round(rep.pixelsHigh * scale));
-  const small = $.NSBitmapImageRep.alloc
-    .initWithBitmapDataPlanesPixelsWidePixelsHighBitsPerSampleSamplesPerPixelHasAlphaIsPlanarColorSpaceNameBytesPerRowBitsPerPixel(
-      $(), w, h, 8, 3, false, false, $.NSCalibratedRGBColorSpace, 0, 0,
+  const small =
+    $.NSBitmapImageRep.alloc.initWithBitmapDataPlanesPixelsWidePixelsHighBitsPerSampleSamplesPerPixelHasAlphaIsPlanarColorSpaceNameBytesPerRowBitsPerPixel(
+      $(),
+      w,
+      h,
+      8,
+      3,
+      false,
+      false,
+      $.NSCalibratedRGBColorSpace,
+      0,
+      0,
     );
   const ctx = $.NSGraphicsContext.graphicsContextWithBitmapImageRep(small);
   $.NSGraphicsContext.saveGraphicsState;
@@ -89,10 +101,20 @@ function repFromImage(path) {
     return rep;
   }
   const scale = MAX_PIXELS / longest;
-  const w = Math.round(rep.pixelsWide * scale), h = Math.round(rep.pixelsHigh * scale);
-  const scaled = $.NSBitmapImageRep.alloc
-    .initWithBitmapDataPlanesPixelsWidePixelsHighBitsPerSampleSamplesPerPixelHasAlphaIsPlanarColorSpaceNameBytesPerRowBitsPerPixel(
-      $(), w, h, 8, 4, true, false, $.NSCalibratedRGBColorSpace, 0, 0,
+  const w = Math.round(rep.pixelsWide * scale),
+    h = Math.round(rep.pixelsHigh * scale);
+  const scaled =
+    $.NSBitmapImageRep.alloc.initWithBitmapDataPlanesPixelsWidePixelsHighBitsPerSampleSamplesPerPixelHasAlphaIsPlanarColorSpaceNameBytesPerRowBitsPerPixel(
+      $(),
+      w,
+      h,
+      8,
+      4,
+      true,
+      false,
+      $.NSCalibratedRGBColorSpace,
+      0,
+      0,
     );
   const ctx = $.NSGraphicsContext.graphicsContextWithBitmapImageRep(scaled);
   $.NSGraphicsContext.saveGraphicsState;
@@ -126,9 +148,13 @@ function render(request) {
       writePNG(rep, png);
       const gray = writeProfile(rep, profilePath, profileWidth);
       pages.push({
-        page: number, png, profile: profilePath,
-        width: Number(rep.pixelsWide), height: Number(rep.pixelsHigh),
-        grayWidth: gray.width, grayHeight: gray.height,
+        page: number,
+        png,
+        profile: profilePath,
+        width: Number(rep.pixelsWide),
+        height: Number(rep.pixelsHigh),
+        grayWidth: gray.width,
+        grayHeight: gray.height,
       });
     }
   } else {
@@ -138,9 +164,13 @@ function render(request) {
     writePNG(rep, png);
     const gray = writeProfile(rep, profilePath, profileWidth);
     pages.push({
-      page: 1, png, profile: profilePath,
-      width: Number(rep.pixelsWide), height: Number(rep.pixelsHigh),
-      grayWidth: gray.width, grayHeight: gray.height,
+      page: 1,
+      png,
+      profile: profilePath,
+      width: Number(rep.pixelsWide),
+      height: Number(rep.pixelsHigh),
+      grayWidth: gray.width,
+      grayHeight: gray.height,
     });
   }
   return { pageCount, pages };
@@ -158,7 +188,11 @@ function crop(request) {
     const cropped = $.CGImageCreateWithImageInRect(cg, rect);
     const rep = $.NSBitmapImageRep.alloc.initWithCGImage(cropped);
     writePNG(rep, tile.path);
-    written.push({ path: tile.path, width: Number(rep.pixelsWide), height: Number(rep.pixelsHigh) });
+    written.push({
+      path: tile.path,
+      width: Number(rep.pixelsWide),
+      height: Number(rep.pixelsHigh),
+    });
   }
   return { tiles: written };
 }
@@ -173,4 +207,3 @@ function main() {
 }
 
 main();
-undefined;

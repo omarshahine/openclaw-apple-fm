@@ -1,65 +1,67 @@
+// Path validation for node-local files an agent may point the tool at.
+// Every case here is rejected before the render helper runs, so these stay
+// platform independent.
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { defaultAllowedRoots, resolveInputPath } from "../src/images.ts";
+import { defaultAllowedRoots, prepareDocument } from "../src/images.ts";
 
 const root = mkdtempSync(join(tmpdir(), "apple-fm-test-"));
-const allowed = [root];
-const pdf = join(root, "doc.pdf");
-writeFileSync(pdf, "%PDF-1.4 test");
+const allowedRoots = [root];
+const prepare = (input: string) => prepareDocument(input, { tile: true, allowedRoots });
 
 after(() => rmSync(root, { recursive: true, force: true }));
 
-test("accepts a supported file inside an allowed root", () => {
-  assert.match(resolveInputPath(pdf, allowed), /doc\.pdf$/);
+test("requires an absolute path", async () => {
+  await assert.rejects(prepare("relative/doc.pdf"), /must be absolute/);
 });
 
-test("requires an absolute path", () => {
-  assert.throws(() => resolveInputPath("relative/doc.pdf", allowed), /must be absolute/);
-});
-
-test("rejects unsupported extensions before touching the file", () => {
+test("rejects unsupported extensions before touching the file", async () => {
   const script = join(root, "payload.sh");
   writeFileSync(script, "#!/bin/sh\n");
-  assert.throws(() => resolveInputPath(script, allowed), /unsupported file type \.sh/);
+  await assert.rejects(prepare(script), /unsupported file type \.sh/);
 });
 
-test("rejects paths outside the allowed roots", () => {
+test("rejects paths outside the allowed roots", async () => {
   const outside = mkdtempSync(join(tmpdir(), "apple-fm-outside-"));
   const other = join(outside, "other.pdf");
   writeFileSync(other, "%PDF-1.4");
   try {
-    assert.throws(() => resolveInputPath(other, allowed), /outside the allowed roots/);
+    await assert.rejects(prepare(other), /outside the allowed roots/);
   } finally {
     rmSync(outside, { recursive: true, force: true });
   }
 });
 
-test("a symlink cannot escape an allowed root", () => {
+test("a symlink cannot escape an allowed root", async () => {
   const outside = mkdtempSync(join(tmpdir(), "apple-fm-secret-"));
   const secret = join(outside, "secret.pdf");
   writeFileSync(secret, "%PDF-1.4 secret");
   const link = join(root, "link.pdf");
   symlinkSync(secret, link);
   try {
-    assert.throws(() => resolveInputPath(link, allowed), /outside the allowed roots/);
+    await assert.rejects(prepare(link), /outside the allowed roots/);
   } finally {
     rmSync(outside, { recursive: true, force: true });
     rmSync(link, { force: true });
   }
 });
 
-test("rejects directories and missing files", () => {
+test("rejects directories and missing files", async () => {
   const dir = join(root, "folder.pdf");
   mkdirSync(dir);
-  assert.throws(() => resolveInputPath(dir, allowed), /cannot read .*not a file/);
-  assert.throws(() => resolveInputPath(join(root, "nope.pdf"), allowed), /cannot read/);
+  await assert.rejects(prepare(dir), /cannot read .*not a file/);
+  await assert.rejects(prepare(join(root, "nope.pdf")), /cannot read/);
 });
 
-test("expands ~ against the node's home directory", () => {
-  assert.throws(() => resolveInputPath("~/definitely-missing-file.pdf", allowed), /cannot read/);
+test("expands ~ against the node's home directory", async () => {
+  await assert.rejects(prepare("~/definitely-missing-file.pdf"), /cannot read/);
+});
+
+test("rejects malformed data URLs", async () => {
+  await assert.rejects(prepare("data:application/pdf;base64,AAAA"), /data URLs must be/);
 });
 
 test("the default root is the home directory", () => {

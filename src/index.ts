@@ -9,7 +9,15 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { DEFAULT_SOCKET_PATH, FmServer, fmInstalled, fmLicenseAgreed } from "./fm-server.js";
 import { defaultAllowedRoots, prepareDocument } from "./images.js";
-import { awaitJob, cancelAllJobs, cancelJob, getJob, runningJobCount, startJob, type JobProgress } from "./jobs.js";
+import {
+  awaitJob,
+  cancelAllJobs,
+  cancelJob,
+  getJob,
+  runningJobCount,
+  startJob,
+  type JobProgress,
+} from "./jobs.js";
 import {
   assertInputSize,
   CONTEXT_TOKENS,
@@ -46,7 +54,9 @@ type PluginConfig = {
 
 type ChatUsage = { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
 type ChatResult = { text: string; finishReason?: string; usage?: ChatUsage };
-type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+type ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
 
 function textResult(text: string, details: Record<string, unknown>): string {
   return JSON.stringify({ content: [{ type: "text", text }], details });
@@ -57,6 +67,7 @@ export default definePluginEntry({
   name: "Apple Foundation Models",
   description: "On-device Apple Foundation Models on a paired macOS 27 node.",
   register(api) {
+    // SAFETY: plugin config is validated against configSchema in openclaw.plugin.json.
     const config = (api.pluginConfig ?? {}) as PluginConfig;
     const server = new FmServer(config.socketPath ?? DEFAULT_SOCKET_PATH);
     const timeoutMs = config.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -94,15 +105,26 @@ export default definePluginEntry({
             ? {
                 response_format: {
                   type: "json_schema",
-                  json_schema: { name: "result", schema: normalizeJsonSchema(request.jsonSchema), strict: true },
+                  json_schema: {
+                    name: "result",
+                    schema: normalizeJsonSchema(request.jsonSchema),
+                    strict: true,
+                  },
                 },
               }
             : {}),
         };
-        const res = await server.request("POST", "/v1/chat/completions", payload, timeoutMs, request.signal);
+        const res = await server.request(
+          "POST",
+          "/v1/chat/completions",
+          payload,
+          timeoutMs,
+          request.signal,
+        );
         if (res.status !== 200) {
           throw new Error(`fm serve: ${errorMessage(res.body, res.status)}`);
         }
+        // SAFETY: fm serve answers Chat Completions JSON; fields are checked below.
         const body = res.body as {
           choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
           usage?: ChatUsage;
@@ -111,7 +133,11 @@ export default definePluginEntry({
         if (typeof choice?.message?.content !== "string") {
           throw new Error("fm serve response did not contain choices[0].message.content");
         }
-        return { text: choice.message.content, finishReason: choice.finish_reason, usage: body.usage };
+        return {
+          text: choice.message.content,
+          finishReason: choice.finish_reason,
+          usage: body.usage,
+        };
       };
       const next = modelQueue.then(run, run);
       modelQueue = next.catch(() => undefined);
@@ -129,7 +155,11 @@ export default definePluginEntry({
       }
     };
 
-    const runRespond = async (params: RunParams, progress: JobProgress, signal: AbortSignal): Promise<string> => {
+    const runRespond = async (
+      params: RunParams,
+      progress: JobProgress,
+      signal: AbortSignal,
+    ): Promise<string> => {
       const prompt = params.prompt?.trim();
       if (!prompt) {
         throw new Error("prompt is required for action=respond");
@@ -137,7 +167,9 @@ export default definePluginEntry({
       assertInputSize(prompt.length + (params.system?.length ?? 0));
       const images = params.images ?? [];
       if (images.length > MAX_RESPOND_IMAGES) {
-        throw new Error(`respond accepts at most ${MAX_RESPOND_IMAGES} images; use action=ocr for documents`);
+        throw new Error(
+          `respond accepts at most ${MAX_RESPOND_IMAGES} images; use action=ocr for documents`,
+        );
       }
       const started = Date.now();
       progress.total = images.length + 1;
@@ -180,7 +212,11 @@ export default definePluginEntry({
       });
     };
 
-    const runOcr = async (params: RunParams, progress: JobProgress, signal: AbortSignal): Promise<string> => {
+    const runOcr = async (
+      params: RunParams,
+      progress: JobProgress,
+      signal: AbortSignal,
+    ): Promise<string> => {
       const input = params.path?.trim() || params.images?.[0]?.trim();
       if (!input) {
         throw new Error("path is required for action=ocr");
@@ -192,7 +228,10 @@ export default definePluginEntry({
       const doc = await prepareDocument(input, {
         tile: true,
         firstPage,
-        lastPage: Math.min(range.lastPage ?? Number.MAX_SAFE_INTEGER, firstPage + MAX_OCR_PAGES - 1),
+        lastPage: Math.min(
+          range.lastPage ?? Number.MAX_SAFE_INTEGER,
+          firstPage + MAX_OCR_PAGES - 1,
+        ),
         allowedRoots,
         signal,
       });
@@ -246,11 +285,14 @@ export default definePluginEntry({
         const latencyMs = Date.now() - started;
         const clipped = transcript.length > MAX_TRANSCRIPT_CHARS;
         const meta = `[apple_fm on-device OCR: ${doc.pages.length} page(s), ${tiles} tiles, ${latencyMs}ms, ${promptTokens + completionTokens} tokens]`;
-        return textResult(`${clipped ? transcript.slice(0, MAX_TRANSCRIPT_CHARS) : transcript}\n\n${meta}`, {
-          ...details,
-          latencyMs,
-          ...(clipped ? { clippedTo: MAX_TRANSCRIPT_CHARS } : {}),
-        });
+        return textResult(
+          `${clipped ? transcript.slice(0, MAX_TRANSCRIPT_CHARS) : transcript}\n\n${meta}`,
+          {
+            ...details,
+            latencyMs,
+            ...(clipped ? { clippedTo: MAX_TRANSCRIPT_CHARS } : {}),
+          },
+        );
       }
 
       progress.stage = "answering";
@@ -319,6 +361,8 @@ export default definePluginEntry({
       handle: async (paramsJSON) => {
         const params = parseParams(paramsJSON);
         const waitMs = resolveWaitMs(params.waitMs);
+        // parseParams guarantees jobId for result/cancel.
+        const jobId = params.jobId ?? "";
 
         switch (params.action) {
           case "status": {
@@ -334,11 +378,13 @@ export default definePluginEntry({
             });
           }
           case "result":
-            return await awaitJob(getJob(params.jobId as string), waitMs);
+            return await awaitJob(getJob(jobId), waitMs);
           case "cancel": {
-            const cancelled = cancelJob(params.jobId as string);
+            const cancelled = cancelJob(jobId);
             return textResult(
-              cancelled ? `Cancelled job ${params.jobId}.` : `Job ${params.jobId} had already finished.`,
+              cancelled
+                ? `Cancelled job ${params.jobId}.`
+                : `Job ${params.jobId} had already finished.`,
               { status: "done", cancelled },
             );
           }
@@ -349,7 +395,11 @@ export default definePluginEntry({
             );
           default:
             return await awaitJob(
-              startJob("respond", (progress, signal) => runRespond(params, progress, signal), logger),
+              startJob(
+                "respond",
+                (progress, signal) => runRespond(params, progress, signal),
+                logger,
+              ),
               waitMs,
             );
         }

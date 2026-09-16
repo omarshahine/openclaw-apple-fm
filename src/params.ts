@@ -1,18 +1,19 @@
-/** Parameter parsing and validation for the apple_fm node command (no runtime deps). */
+/** Parameter parsing and validation for the apple_fm node command. */
+import { isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
 
 // fm's system model has an 8,192-token window shared by prompt and output.
 export const CONTEXT_TOKENS = 8192;
-export const MAX_INPUT_CHARS = 20_000;
+const MAX_INPUT_CHARS = 20_000;
 export const MAX_OUTPUT_TOKENS = 4096;
 export const DEFAULT_MAX_TOKENS = 1024;
 // Gateway node tool calls time out at 30s; answer or hand back a jobId before that.
-export const DEFAULT_WAIT_MS = 20_000;
-export const MAX_WAIT_MS = 25_000;
+const DEFAULT_WAIT_MS = 20_000;
+const MAX_WAIT_MS = 25_000;
 export const MAX_RESPOND_IMAGES = 4;
 export const MAX_OCR_PAGES = 20;
 
-export const ACTIONS = ["status", "respond", "ocr", "result", "cancel"] as const;
-export type Action = (typeof ACTIONS)[number];
+const ACTIONS = ["status", "respond", "ocr", "result", "cancel"] as const;
+type Action = (typeof ACTIONS)[number];
 
 export type RunParams = {
   action: Action;
@@ -43,7 +44,8 @@ export const toolParameters = {
     },
     prompt: {
       type: "string",
-      description: "Prompt for respond (required) or ocr (optional question/extraction over the transcript).",
+      description:
+        "Prompt for respond (required) or ocr (optional question/extraction over the transcript).",
     },
     system: { type: "string", description: "Optional instructions for respond/ocr." },
     // A string, not an object: strict tool-schema providers (OpenAI) collapse a
@@ -62,13 +64,17 @@ export const toolParameters = {
     },
     path: {
       type: "string",
-      description: "ocr only: absolute path on the node to a PDF or image (or a data:image/...;base64 URL).",
+      description:
+        "ocr only: absolute path on the node to a PDF or image (or a data:image/...;base64 URL).",
     },
     pages: {
       type: "string",
       description: 'ocr only: page or range for PDFs, e.g. "1" or "2-4". Default: all (max 20).',
     },
-    jobId: { type: "string", description: "result/cancel only: jobId returned by a running respond/ocr call." },
+    jobId: {
+      type: "string",
+      description: "result/cancel only: jobId returned by a running respond/ocr call.",
+    },
     waitMs: {
       type: "integer",
       minimum: 0,
@@ -85,6 +91,7 @@ export function parseParams(paramsJSON?: string | null): RunParams {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("apple_fm params must be a JSON object");
   }
+  // SAFETY: shape is validated field by field below before any field is used.
   const params = parsed as RunParams;
   if (!ACTIONS.includes(params.action)) {
     throw new Error(`action must be one of ${ACTIONS.join(", ")}`);
@@ -143,8 +150,6 @@ export function normalizeJsonSchema(input: unknown): Record<string, unknown> {
       throw new Error("jsonSchema must be a JSON Schema object (got an unparseable string)");
     }
   }
-  const isRecord = (v: unknown): v is Record<string, unknown> =>
-    !!v && typeof v === "object" && !Array.isArray(v);
   if (isRecord(schema) && isRecord(schema.json_schema) && isRecord(schema.json_schema.schema)) {
     schema = schema.json_schema.schema;
   } else if (isRecord(schema) && isRecord(schema.schema) && !("type" in schema)) {
@@ -158,15 +163,17 @@ export function normalizeJsonSchema(input: unknown): Record<string, unknown> {
     return { type: "object", ...schema };
   }
   if (!hasRoot) {
-    throw new Error("jsonSchema needs a root 'type' (e.g. {\"type\":\"object\",\"properties\":{...}})");
+    throw new Error('jsonSchema needs a root \'type\' (e.g. {"type":"object","properties":{...}})');
   }
   return schema;
 }
 
 export function errorMessage(body: unknown, status: number): string {
   if (body && typeof body === "object" && "error" in body) {
+    // SAFETY: guarded by the isRecord check and the "error" in body test above.
     const err = (body as { error: unknown }).error;
     if (err && typeof err === "object" && "message" in err) {
+      // SAFETY: guarded by the "message" in err test on the previous line.
       return String((err as { message: unknown }).message);
     }
     return JSON.stringify(err);

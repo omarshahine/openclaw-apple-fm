@@ -83,7 +83,9 @@ export function getJob(id: string): Job {
   sweep();
   const job = jobs.get(id);
   if (!job) {
-    throw new Error(`unknown or expired jobId ${id} (results are kept ${JOB_TTL_MS / 60_000} minutes)`);
+    throw new Error(
+      `unknown or expired jobId ${id} (results are kept ${JOB_TTL_MS / 60_000} minutes)`,
+    );
   }
   return job;
 }
@@ -129,9 +131,12 @@ export async function awaitJob(job: Job, waitMs: number): Promise<string> {
     }
   } catch (error) {
     if (job.cancelled) {
-      throw new Error(`apple_fm ${job.kind} job ${job.id} was cancelled`);
+      throw new Error(`apple_fm ${job.kind} job ${job.id} was cancelled`, { cause: error });
     }
-    throw new Error(`apple_fm ${job.kind} job failed: ${(error as Error).message}`);
+    // SAFETY: startJob normalizes every rejection reason into an Error.
+    throw new Error(`apple_fm ${job.kind} job failed: ${(error as Error).message}`, {
+      cause: error,
+    });
   } finally {
     clearTimeout(timer);
   }
@@ -148,9 +153,4 @@ export async function awaitJob(job: Job, waitMs: number): Promise<string> {
     ],
     details: { status: "running", jobId: job.id, progress: job.progress, elapsedSeconds: elapsed },
   });
-}
-
-/** Test seam: drop all jobs. */
-export function resetJobs(): void {
-  jobs.clear();
 }
