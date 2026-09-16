@@ -70,5 +70,16 @@ jobs:
             --source-commit "${{ github.sha }}" \
             --source-ref "${{ github.ref_name }}"
 
+      # A new or updated package waits on ClawHub security scans before it is
+      # publicly visible, so treat "not found yet" as pending rather than failed.
       - name: Verify
-        run: clawhub package inspect openclaw-apple-fm
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if clawhub package inspect openclaw-apple-fm; then
+              exit 0
+            fi
+            echo "not visible yet (attempt $attempt); waiting for security scans"
+            sleep 60
+          done
+          echo "::notice::published, still pending ClawHub security scans"
+
