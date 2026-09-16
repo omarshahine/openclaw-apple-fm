@@ -1,0 +1,14 @@
+{
+  "name": "openclaw-apple-fm",
+  "owner": {
+    "name": "Omar Shahine"
+  },
+  "plugins": [
+    {
+      "name": "openclaw-apple-fm",
+      "source": ".",
+      "description": "Run Apple's on-device Foundation Model (text, vision, OCR) on a paired macOS 27 node",
+      "version": "0.1.0"
+    }
+  ]
+}

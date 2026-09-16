@@ -1,6 +1,7 @@
 {
   "id": "apple-fm",
   "name": "Apple Foundation Models",
+  "version": "0.1.0",
   "description": "Runs Apple's on-device Foundation Models (via /usr/bin/fm serve) on a paired macOS 27 node and exposes it to agents as the apple_fm tool.",
   "configSchema": {
     "type": "object",

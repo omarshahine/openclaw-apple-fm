@@ -1,23 +1,60 @@
 {
   "name": "openclaw-apple-fm",
-  "version": "0.2.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "OpenClaw node-host plugin that runs Apple Foundation Models (on-device) on a paired macOS 27 node",
   "type": "module",
   "license": "MIT",
   "author": "Omar Shahine",
-  "files": ["src", "native", "openclaw.plugin.json", "README.md", "LICENSE"],
+  "files": [
+    "dist/",
+    "src/",
+    "native/",
+    "openclaw.plugin.json",
+    "marketplace.json",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
+    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
     "test": "node --import ./test/ts-resolve.mjs --test test/",
     "typecheck": "sh scripts/typecheck.sh",
     "check": "npm run typecheck && npm test",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "plugin:check": "npx --yes @openclaw/plugin-inspector inspect --no-openclaw"
   },
   "openclaw": {
-    "extensions": ["./src/index.ts"],
-    "compat": { "pluginApi": ">=2026.9.4" }
+    "extensions": [
+      "./src/index.ts"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.9.4"
+    }
   },
-  "peerDependencies": { "openclaw": ">=2026.9.4" },
-  "engines": { "node": ">=24" },
-  "os": ["darwin"]
+  "peerDependencies": {
+    "openclaw": ">=2026.9.4"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "os": [
+    "darwin"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omarshahine/openclaw-apple-fm.git"
+  },
+  "homepage": "https://github.com/omarshahine/openclaw-apple-fm#readme",
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "apple",
+    "foundation-models",
+    "on-device",
+    "ocr",
+    "macos",
+    "privacy"
+  ]
 }

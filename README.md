@@ -13,6 +13,14 @@ agent (remote Gateway) ──node.invoke applefm.run──▶ node host (this Ma
                                                            └─ FoundationModels (on-device)
 ```
 
+## Terms
+
+Apple's Foundation Models CLI terms require each machine to accept them once
+(`sudo fm license`) and prohibit programmatic access to Apple models except as
+expressly permitted. This plugin only drives `fm serve`, the Chat Completions server
+Apple ships in that CLI for exactly this purpose; it neither bundles nor reimplements
+any Apple model.
+
 ## Requirements
 
 - macOS 27 with Apple Intelligence enabled
@@ -20,6 +28,16 @@ agent (remote Gateway) ──node.invoke applefm.run──▶ node host (this Ma
 - Apple Foundation Models CLI license accepted once per machine: `sudo fm license`
 
 ## Install (node only)
+
+From ClawHub:
+
+```bash
+OPENCLAW_CONFIG_PATH=~/.openclaw/node-host.json \
+  openclaw plugins install openclaw-apple-fm --accept-capabilities
+launchctl kickstart -k gui/$(id -u)/ai.openclaw.node
+```
+
+From a local checkout:
 
 ```bash
 OPENCLAW_CONFIG_PATH=~/.openclaw/node-host.json \
@@ -119,3 +137,15 @@ openclaw config set gateway.nodes.commands.allow '["applefm.run", ...existing]' 
 ```
 
 If the calling agent restricts tools (a `tools.profile` plus `alsoAllow`), add `apple_fm` to that agent's `alsoAllow`; otherwise the tool is filtered out of the agent's tool set even though the node publishes it. Then reconnect the node and approve its new command surface.
+
+## Publishing
+
+Tag-driven: pushing a `v*` tag runs `.github/workflows/publish-clawhub.yml`, which builds
+`dist/`, syncs every manifest version to the tag (the tag is the source of truth, so a
+version drift cannot fail the publish), and publishes to ClawHub. The repo needs a
+`CLAWHUB_TOKEN` secret.
+
+```bash
+npm version patch   # or minor/major
+git push --follow-tags
+```
